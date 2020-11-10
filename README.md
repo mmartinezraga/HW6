@@ -1,1 +1,175 @@
 # HW6
+
+<p style="color:rgb(182,18,27);font-family:corbel">Mónica Martínez-Raga</p>
+<p style="color:rgb(182,18,27);font-family:corbel">Fall 2020</p>
+<p style="color:rgb(182,18,27);font-family:corbel">LOGIT</p>
+<p style="color:rgb(182,18,27);font-family:corbel">Collaborators: Isabela Vieira</p>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "")
+getwd()
+load("acs2017_ny_data.RData")
+acs2017_ny[1:10,1:7]
+attach(acs2017_ny)
+```
+
+In this lab, we will explore the relationship between women and labor participation in New York, given the effects of amount of children (NCHILD) and marital status (MARST). We chose this particular subgroup since the burden of gender roles in traditional family structures tends to fall more often on women, affecting their ability or willingness to work. Throughout their careers, these gender roles force many women to take on leaves that their non-pregant partners are not allowed to take (causing gender discrimination in the work place that is now protected but given lack of female leadership in corporations we can assume still plays a role), to undertake more extra-laboral responsibilities such as childcare and house maintanance, or to even entirely bare the unbringing of a child which is the case for single mothers. For these reasons and more, some women opt to leave the labor force after chidlbirth or simply cannot progress career and income-wise as much.  
+
+Null hypothesis: There is no relationship between labor participation and marital status and number of children among women.
+
+For our subset, we including women with ages that tend to be in the workforce -- 25 or older because we can decrease the amount of women who are not in the labor force for pursuing their college degrees, and 65 or younger since 66 is the allowable age to start receving social security in NY, prompting many women to retire independently of marital status or amount of children. 
+
+
+```{r}
+use_varb <- (AGE >= 25) & (AGE <= 65) & (female == 1) 
+dat_use <- subset(acs2017_ny,use_varb) 
+detach()
+attach(dat_use)
+```
+ 
+Before using our factorial variables, we define the categories.
+
+
+```{r}
+dat_use$LABFORCE <- as.factor(dat_use$LABFORCE)
+levels(dat_use$LABFORCE) <- c("Not in LF","in LF", "N/A")
+dat_use$MARST <- as.factor(dat_use$MARST)
+levels(dat_use$MARST) <- c("married spouse present","married spouse absent","separated","divorced","widowed","never married")
+```
+
+
+First we take a look at women's labor participation by age. We expect to see a trend similar to previous labs where income reach an average maximun at around 55 yrs old.
+
+As we can see below, percentage of women in labor force decreases as age bands increase, with a more dramatic drop starting at age 55 and forward. This is congruent with our expectations. With age, more women and their partners if any gain enough money or birth enought children for one of them, typically the woman, to stay at home. 
+
+```{r}
+library(kableExtra)
+```
+
+```{r}
+dat_use$age_bands <- cut(dat_use$AGE,breaks=c(25,30,35,40,45,50,55,60,65)) #Age by bands
+lf <- table(dat_use$age_bands,dat_use$LABFORCE) 
+lf %>% 
+  kbl() %>%
+  kable_styling()
+```
+
+```{r}
+plot(lf, main="Female Labor Force Participation by Age Band",
+xlab="Age Band",
+ylab="Participation", 
+col = c("grey", "purple"))
+```
+
+
+```{r}
+install.packages("stargazer")
+```
+
+
+We will show the relationship now including marital status and number of children variables to better explain participation using a logit model. Below we observe that the intercept represents "MARST married spouse present". Our model in itself is logical since all variables are significant with the exception of "MARST separted." 
+
+We are not sure why, but we may assume that this is because a separation in a marriage may not be such a drastic change from the status quo. In other words, if a married couple defines itself as separated, more elements of the relationship will remain the same as the "healthy" marriage, not yet experiencing the effects on work, location and even wealth that a formal divorce or death can cause. Therefore, we can assume that a woman, apart from not currently living with their partner, is not affected by a separation in terms of their labor participation. 
+
+"MARST never married" shows a bit less significance but that may just be that single women's marital status affects them less than those that have opted into marriage at any point in their lives. (Kinda proves our point! But let's investigate further.)
+
+```{r}
+model_logit1 <- glm(LABFORCE ~ AGE + MARST + NCHILD,
+            family = binomial, data = dat_use)
+summary(model_logit1)
+```
+
+
+By observing estimates we can measure elasticty, how much a unit increase in  one of our independent variables will increase or decrease labor force participation among women.
+
+We can interpret from the model below that for every increase in independent variable unit (year for AGE, yes for MARST, child for NCHILD), likability of being in labor force decreases as much when all else is constant. This is measure of the indp. vairable's elasticity to the dependent. Negative correlations within most variable show an decrease in labor participation within several MARSTs and with increasing number of children. This allows us to *reject* our hypothesis. Further, it makes sense that "MARST divorced" is positive since it can explain women who have to return to work after a divorce if they previously didn't work. 
+
+```{r}
+library(stargazer)
+stargazer(model_logit1, type="text") 
+```
+
+
+
+Visual representation:
+```{r}
+dat_use$LABFORCE <- droplevels(dat_use$LABFORCE)
+NNobs <- length(dat_use$LABFORCE)
+set.seed(12345) 
+graph_obs <- (runif(NNobs) < 0.1)
+dat_graph <-subset(dat_use,graph_obs)  
+ plot(LABFORCE ~ jitter(AGE, factor = 2), pch = 16, ylim = c(0,1), data = dat_graph, main = "Female Labor Force Participation including Variables", xlab = "Age", ylab = "Labor Force Status", col = c("grey","purple"))
+to_be_predicted <- data.frame(AGE = 25:65, MARST = "never married", NCHILD = 1)
+to_be_predicted$yhat <- predict(model_logit1, newdata = to_be_predicted)
+lines(yhat ~ AGE, data = to_be_predicted)
+```
+
+```{r}
+detach(dat_use)
+```
+
+
+Now we verify if we can truly state that these factors affect women more than men. We repeat the process with men. We expect to reject our hypothesis, but with less statistical significance than women.
+
+Null hypothesis: There is no relationship between labor participation and marital status and number of children among women.
+
+```{r}
+attach(acs2017_ny)
+use_varb2 <- (AGE >= 25) & (AGE <= 65) & (female == 0) 
+dat_use2 <- subset(acs2017_ny,use_varb2) 
+detach()
+attach(dat_use2)
+```
+
+```{r}
+dat_use2$LABFORCE <- as.factor(dat_use2$LABFORCE)
+levels(dat_use2$LABFORCE) <- c("Not in LF","in LF", "N/A")
+dat_use2$MARST <- as.factor(dat_use2$MARST)
+levels(dat_use2$MARST) <- c("married spouse present","married spouse absent","separated","divorced","widowed","never married")
+```
+
+```{r}
+dat_use2$LABFORCE <- droplevels(dat_use2$LABFORCE)
+```
+
+
+Overall, there are more men in the labor force than women, even though women make up more of the population than men. The trend is also different. Men have a more parabolic shaped participation with age vs. women's which seems more downhill. Makes sense. If our theory holds, all of these life events (marriage & kids) are diminishing career progression or sustainability for women since the age that they would be graduating college.
+
+```{r}
+library(kableExtra)
+dat_use2$age_bands <- cut(dat_use2$AGE,breaks=c(25,30,35,40,45,50,55,60,65))
+lf.male <- table(dat_use2$age_bands,dat_use2$LABFORCE) 
+lf.male %>% 
+  kbl() %>%
+  kable_styling()
+```
+
+
+```{r}
+plot(lf.male, main="Male Labor Force Participation by Age Band",
+xlab="Age Band",
+ylab="Participation", 
+col = c("grey", "blue"))
+```
+
+This time, all variables are significant for men in the same level. Therefore, we can *reject* our hypothesis. However, we will compare elasticity with women's coefficients further.
+
+
+```{r}
+model_logit2 <- glm(LABFORCE ~ AGE + MARST + NCHILD,
+            family = binomial, data = dat_use2)
+summary(model_logit2)
+```
+
+
+AGE for both genders is negative, we assumed this from previous labs. However, number of children actually seem to positively correlate with men's labor participation. It actually makes sense to me because if we go back to gender roles, if having children nudges a portion of the female population to stay home, this would in contrast force the "breadwinner" (which according to gender roles tend to be men) to not leave the labor force. 
+
+In terms of the marital status, I'm surprised to see high significance and low estimates, more so than women's. Maybe they are retiring earlier? Maybe they reach a tax bracket that forces them to stop working as so many economists warn will happen if we tax the rich??!
+
+```{r}
+library(stargazer)
+stargazer(model_logit2, type="text") 
+```
+
+In conclusion, number of children presents a negative relationship with women's labor participation, but at the same time a positive one for men's. I will assume that as women are forced to stop working to take care of children, men are forced to work more. I will say, gender roles affect truly men too you know! In terms of age, the trend within income from previous labs was observed for labor participation for men and women. Martial status case by case made more sense for women. I think my own biases or misinformation do not let me find a story for men. But it does look like their labor participation is definitely negatively correlated with their marital status.
